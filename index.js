@@ -36,6 +36,22 @@ const fs = require('fs');
 const spawn = require('child_process').spawn;
 const defaultFPS = 60;
 
+const initTimesnap = (timesnapConfig) => {
+  const config = Object.assign({}, timesnapConfig);
+
+  let lastFrame = 1;
+
+  config.shouldSkipFrame = ({ frameCount }) => {
+    const skip = frameCount <= lastFrame;
+    if (!skip) {
+      lastFrame = frameCount;
+    }
+    return skip;
+  };
+
+  return () => timesnap(config);
+};
+
 const makeFileDirectoryIfNeeded = function (filepath) {
   var dir = path.parse(filepath).dir, ind, currDir;
   var directories = dir.split(path.sep);
@@ -194,8 +210,17 @@ module.exports = function (config) {
     };
   }
 
+  const numInstances = timesnapConfig.instances || 1;
+  const instances = [];
+
+  const capture = initTimesnap(timesnapConfig);
+
+  for (let i = 0; i < numInstances; i++) {
+    instances.push(capture());
+  }
+
   var overallError;
-  return timesnap(timesnapConfig)
+  return Promise.all(instances)
     .then(function () {
       if (convertProcess) {
         convertProcess.stdin.end();
