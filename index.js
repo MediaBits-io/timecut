@@ -39,7 +39,7 @@ const defaultFPS = 60;
 const initTimesnap = (timesnapConfig) => {
   const config = Object.assign({}, timesnapConfig);
 
-  let lastFrame = 1;
+  let lastFrame = 0;
 
   config.shouldSkipFrame = ({ frameCount }) => {
     const skip = frameCount <= lastFrame;
@@ -201,12 +201,29 @@ module.exports = function (config) {
   };
 
   if (pipeMode) {
+    let lastFrame = 0;
+    const buffers = new Map();
+
     processPromise = makeProcessPromise();
-    timesnapConfig.frameProcessor = function (buffer) {
+    timesnapConfig.frameProcessor = function (buffer, frameCount) {
       if (processError) {
         throw processError;
       }
-      convertProcess.stdin.write(buffer);
+
+      // With multiple instances, frames need to be piped sequentially
+      const isNextFrame = frameCount === lastFrame + 1;
+
+      if (!isNextFrame) {
+        buffers.set(frameCount, buffer);
+      } else {
+        convertProcess.stdin.write(buffer);
+        lastFrame = frameCount;
+        while(buffers.has(lastFrame)) {
+          convertProcess.stdin.write(buffers.get(lastFrame));
+          buffers.delete(lastFrame);
+          lastFrame += 1;
+        }
+      }
     };
   }
 
