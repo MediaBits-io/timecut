@@ -49,7 +49,7 @@ const initTimesnap = (timesnapConfig) => {
     return skip;
   };
 
-  return () => timesnap(config);
+  return (id) => timesnap(Object.assign({}, config, { id }));
 };
 
 const makeFileDirectoryIfNeeded = function (filepath) {
@@ -213,16 +213,23 @@ module.exports = function (config) {
       // With multiple instances, frames need to be piped sequentially
       const isNextFrame = frameCount === lastFrame + 1;
 
-      if (!isNextFrame) {
-        buffers.set(frameCount, buffer);
-      } else {
+      if (isNextFrame) {
         convertProcess.stdin.write(buffer);
+
         lastFrame = frameCount;
-        while(buffers.has(lastFrame)) {
-          convertProcess.stdin.write(buffers.get(lastFrame));
-          buffers.delete(lastFrame);
-          lastFrame += 1;
+        let nextFrame = frameCount + 1;
+
+        // Pipe all buffers that were previously cached
+        while(buffers.has(nextFrame)) {
+          log(`Flushing cache: ${nextFrame}`);
+          convertProcess.stdin.write(buffers.get(nextFrame));
+          buffers.delete(nextFrame);
+          lastFrame = nextFrame;
+          nextFrame += 1;
         }
+      } else {
+        log(`Caching: ${frameCount}`);
+        buffers.set(frameCount, buffer);
       }
     };
   }
@@ -233,7 +240,7 @@ module.exports = function (config) {
   const capture = initTimesnap(timesnapConfig);
 
   for (let i = 0; i < numInstances; i++) {
-    instances.push(capture());
+    instances.push(capture(`instance-${i}`));
   }
 
   var overallError;
